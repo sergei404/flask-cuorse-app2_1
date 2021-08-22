@@ -1,5 +1,3 @@
-import json
-
 import flask_migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask import Flask, render_template, request
@@ -13,6 +11,7 @@ from utils import getGoals, getFilterTeachers, getTeacherGoals, weekdays, \
 
 app: Flask = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tutors.db'
+app.config['SQLALCHEMY_ECHO'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 
@@ -45,7 +44,7 @@ class Reservation(db.Model):
     client_phone = db.Column(db.String)
     class_day = db.Column(db.String)
     time = db.Column(db.String)
-    tutor_id: db.Column(db.Integer, db.ForeignKey("tutors.id"))
+    tutor_id = db.Column(db.Integer, db.ForeignKey("tutors.id"))
     tutor = db.relationship("Tutor", back_populates="reservations")
 
 
@@ -59,32 +58,10 @@ class Selection(db.Model):
     name = db.Column(db.String)
 
 
-def seed():
-    with open('teachers.json') as f:
-        teachers = json.load(f)
-    tutors = []
-    for teacher in teachers:
-        teacher_model = Tutor(
-            name=teacher['name'],
-            about=teacher['about'],
-            rating=teacher['rating'],
-            picture=teacher['picture'],
-            price=teacher['price'],
-            goals=teacher['goals'],
-            free=teacher['free'],
-        )
-        tutors.append(teacher_model)
-
-    db.session.bulk_save_objects(tutors)
-    db.session.commit()
-
-
-seed()
-teachers = db.session.query(Tutor).all()
-
-
 @app.route('/')
 def render_main():
+    # seed()
+    teachers = db.session.query(Tutor).limit(3).all()
     return render_template('index.html', goals=getGoals(),
                            teachers=teachers)
 
@@ -92,7 +69,7 @@ def render_main():
 @app.route('/all/', methods=["GET", "POST"])
 def render_all():
     form = SortTeacherForm()
-    teachers_sort = teachers
+    teachers_sort = db.session.query(Tutor).all()
     if request.method == "POST":
         select = form.select.data
         if select == 'rating':
@@ -114,6 +91,7 @@ def render_request():
 
 @app.route('/goal/<goal>/')
 def render_goal(goal):
+    teachers = db.session.query(Tutor).all()
     if not getGoals()[goal]:
         return render_not_found(
             f"{goal} - такой цели обучения нет.")
@@ -125,6 +103,7 @@ def render_goal(goal):
 
 @app.route('/profiles/<int:teacher_id>/')
 def render_teacher_profile(teacher_id):
+    teachers = db.session.query(Tutor).all()
     teacher = getTeacher(teachers, teacher_id)
     goals = getTeacherGoals(getGoals(), teacher['goals'])
     if not teacher:
@@ -156,6 +135,7 @@ def render_request_done():
 
 @app.route('/booking/<int:id>/<day>/<time>/')
 def render_booking(id, day, time):
+    teachers = db.session.query(Tutor).all()
     form = BookingForm()
     day_ru = weekdays[day[:3]][0]
     teacher = getTeacher(teachers, id)
@@ -175,6 +155,7 @@ def render_booking(id, day, time):
 @app.route('/booking_done/', methods=["GET", "POST"])
 def render_booking_done():
     form = BookingForm()
+    teachers = db.session.query(Tutor).all()
     if request.method == "POST" and form.validate_on_submit():
         selection = Reservation(
             client_name=form.name.data,
